@@ -18,9 +18,8 @@ Some of PyRep's features (though currently most of them are unimplemented):
   * Supports differet type of output: PDF, HTML, RTF, ODF, direct print. Currently, however, only PDF is supported with ReportLab library
   * Since the parser is independent from the core, many report definition formats may be implemented
   * Supports data grouping and subreports
-  * Supports evaluation of python expression, with a subset of python's buil-in functions. For example, if 'current' is current dataset object, you can do something like: round(current.amount * 1.2, 2) and the engine will output the 'current.amount' value increased by 20%, rounded to 2 decimals.
+  * Supports evaluation of python expression, with a subset of python's buil-in functions. For example, if 'current' is current dataset object, you can do something like: {{{ round(current.amount * 1.2, 2) }}} and the engine will output the 'current.amount' value increased by 20%, rounded to 2 decimals.
   * Supports report-managed variables and parameters (that you can pass to the report)
   * Supports expression extension with external modules 
   * Supports data aggregation (sum, average, max, min, etc) directly in the report
   * A GUI editor is planned, so that you can define your reports more easily.
-
