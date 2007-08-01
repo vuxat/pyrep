@@ -4,9 +4,9 @@
 """ 
 Base classes.
 
-This module defines classes to build a report.
+This module defines the classes to use to build a report.
 
-Every measurement is expressed in millimeters.
+Millimeters is the default measurement.
 """
 
 import copy
@@ -17,7 +17,7 @@ import dataproviders
 
 def mm(*values):
     """
-    Returns the given values in millimeters (do nothing)
+    Returns the given values in millimeters (does nothing, since mm is the default)
     """
     if len(values) == 1:
         return values[0]
@@ -53,7 +53,7 @@ class Color(object):
         Used to add constants to the class
         """
         
-        defaults={
+        defaults = {
                   'BLACK': (0, 0, 0),
                   'WHITE': (255, 255, 255),
                   'RED': (255, 0, 0),
@@ -64,7 +64,7 @@ class Color(object):
         def __new__(cls,classname,bases,classdict):
             c = type.__new__(cls, classname, bases, classdict)
             
-            for k,v in cls.defaults.items():
+            for k, v in cls.defaults.items():
                 setattr(c, k, c(*v))
             
             return c
@@ -79,10 +79,10 @@ class Color(object):
         @param blue: Blue component in decimal 0-255 range
         """
         
-        for x in ("red","green","blue"):
+        for x in ("red", "green", "blue"):
             v = locals()[x]
             if v<0 or v>255:
-                raise ReportError("Invalid value for %s component: %s"%(x,v))
+                raise ReportError("Invalid value for %s component: %s (must be in range 0 - 255)"%(x,v))
         
         self.red = red
         self.green = green
@@ -103,6 +103,9 @@ class Color(object):
         raise NotImplementedError()
 
     def __str__(self):
+        """
+        If this is a default colour, returns its name, else the tuple (red, green, blue)
+        """
         for k, c in self.__metaclass__.defaults.items():
             if self == Color(*c):
                 return "Color.%s"%k
@@ -120,12 +123,12 @@ class Font(object):
     @ivar size: Font size in points
     @ivar style: A combination of styles flags (ITALIC,BOLD,UNDERLINED)
     """
-    ITALIC=1
-    BOLD=2
-    UNDERLINED=4
+    ITALIC = 1
+    BOLD = 2
+    UNDERLINED = 4
     
-    fonts = {}
-    font_faces=[]
+    fonts = dict()
+    font_faces = list()
     
     def __init__(self,id,face,size,style=[]):
         """
@@ -133,43 +136,43 @@ class Font(object):
         @param id: Font's identificator (string)
         @param face: Font face name. Valid faces are defined by implementation.
         @param size: Font size in points
-        @param style: A combination of styles flags (ITALIC,BOLD,UNDERLINED)
+        @param style: A combination of styles flags (ITALIC, BOLD, UNDERLINED)
         """
         
         if id is None:
             id = "font_%s"%len(self.__class__.fonts)
             
-        self.id=id
+        self.id = id
         
-        self.faces=face.split(",")
-        self.face=self.faces[0]
+        self.faces = face.split(",")
+        self.face = self.faces[0]
                 
-        self.size=size
+        self.size = size
         
-        self.style=style
+        self.style = style
         
         self.__class__.fonts[id] = self
         
     def __str__(self):
-        return  "Font %s face: %s size %s style %s"%(self.id,self.face,self.size,self.style)
+        return  "Font %s face: %s size %s style %s"%(self.id, self.face, self.size, self.style)
     
-class RObject(object):
+class DrawableObject(object):
     """
-    Base class for drawable objects
+    Base class for drawable objects. A drawable object knows its size and how to draw itself.
     """
     
     def __init__(self, size, **kwargs):
         """
         Constructor
         @param parent: The parent section
-        @param size: Object's size
-        @param position: Object's position
+        @param size: Object's size (as a sequence of width, height)
+        @param position: Object's position (as a sequence of x, y)
         @param color: Object's foreground color
         @param backcolor: Object's background color
         """
         
-        self._size = (0,0)
-        self._position = (0,0)
+        self._size = (0, 0)
+        self._position = (0, 0)
         
         self.parent = kwargs.get('parent', None)
 
@@ -187,7 +190,7 @@ class RObject(object):
         """
         
         w, h = t
-        return (w,h)
+        return (w, h)
     
     def set_size(self, size):
         """
@@ -258,7 +261,7 @@ class RObject(object):
     x = property(lambda self: self.position[0], set_x, None, """ Object's x position """)
     y = property(lambda self: self.position[1], set_y, None, """ Object's y position """)
     
-class Container(RObject):
+class Container(DrawableObject):
     """
     An object that contains one or more children
     """
@@ -303,7 +306,7 @@ class Container(RObject):
         for child in self.children:
             child.draw(renderer, environment)
             
-class Page(RObject):
+class Page(DrawableObject):
     """
     Page definition
     """
@@ -361,12 +364,12 @@ class Page(RObject):
         """
         cls.user_defined_pages[name] = size
         
-class Picture(RObject):
+class Picture(DrawableObject):
     """
     An image - TO DEFINE
     """
     
-class Text(RObject):
+class Text(DrawableObject):
     """
     A Text value, used to display any kind of textual value
     """
@@ -401,7 +404,7 @@ class Text(RObject):
     def __str__(self):
         return "Text object: %s"%self.value
     
-class Shape(RObject):
+class Shape(DrawableObject):
     """ Base class for shapes. TO DOCUMENT """
     SOLID = 1
 
@@ -719,14 +722,22 @@ class Renderer(object):
     def finalize_page(self):
         pass
     
-    def draw_text(self, text):
+    def draw_text(self, text, environment = None):
+        raise NotImplementedError("Please use a subclass!")
+
+    def draw_text(self, shape, environment = None):
+        raise NotImplementedError("Please use a subclass!")
+
+    def draw_text(self, shape, environment = None):
         raise NotImplementedError("Please use a subclass!")
     
     def safe_eval(self, expr, environment):
         """
         Safely evaluates the expression "expr"
-        Returns the evaluated value
-        Raises ReportError if the expression cannot be evaluated
+        @param expr: The expression to be evaluated
+        @param environment: The environment object to use
+        @returns: the evaluated value
+        @raises: ReportError if the expression cannot be evaluated
         """
 
         loc = dict()

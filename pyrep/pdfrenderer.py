@@ -74,14 +74,13 @@ class PDFRenderer(Renderer):
     
     def finalize_page(self):
         """
-        Called on page end - used internally
+        Called on page end
         """
         self._canvas.showPage()
         
-    def translate_coords(self, obj):
+    def _translate_coords(self, obj):
         """
         Translates coordinates from PyRep's convention (left to right and top to bottom) to ReportMan's
-        USED INTERNALLY
         """
         
         x = obj.parent.x + obj.x
@@ -94,7 +93,7 @@ class PDFRenderer(Renderer):
 
     def _set_font(self, font):
         """
-        Used internally
+		Sets the current font
         """
 
         for face in font.faces:
@@ -120,7 +119,7 @@ class PDFRenderer(Renderer):
         Draws a text object
         """
         
-        x, y = self.translate_coords(text)
+        x, y = self._translate_coords(text)
         
         txt = str(self.safe_eval(text.value, environment))
         
@@ -138,7 +137,7 @@ class PDFRenderer(Renderer):
         Draws an horizontal line
         """
         
-        x, y = self.translate_coords(shape)
+        x, y = self._translate_coords(shape)
         
         self._canvas.setLineWidth(shape.linewidth * rl_mm)
         
@@ -151,7 +150,7 @@ class PDFRenderer(Renderer):
         Draws a vertical line
         """
 
-        x, y = self.translate_coords(shape)
+        x, y = self._translate_coords(shape)
 
         self._canvas.setLineWidth(shape.linewidth * rl_mm)
         
