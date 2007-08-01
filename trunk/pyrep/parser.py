@@ -232,6 +232,7 @@ class XMLParser(object):
             y = self.parse_number(element.getAttribute("y"))
         
         return x, y
+
     def parse_number(self,value):
         """
         Parses a string value in the form numberunit or number unit
