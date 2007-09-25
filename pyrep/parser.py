@@ -12,6 +12,7 @@ import xml.dom.minidom
 import dataproviders
 
 from base import *
+from report import Report
 
 class XMLParser(object):
     """
@@ -172,7 +173,9 @@ class XMLParser(object):
         if element.hasAttribute("font"):
             kwargs["font"] = self.rpt.get_font(element.getAttribute("font"))
 
-        
+        if element.hasAttribute("color"):
+            kwargs["color"] = Color.from_hex(element.getAttribute("color"))
+
         text = Text(size, **kwargs)
         
         section.add_child(position, text)
@@ -184,6 +187,34 @@ class XMLParser(object):
         line = HLine(size[0])
         
         section.add_child(position, line)            
+
+    def _process_child_box(self, section, element):
+        position = self.get_position(element)
+        size = self.get_size(element)
+
+        if element.hasAttribute("linewidth"):
+            linewidth = self.parse_number(element.getAttribute("linewidth"))
+        else:
+            linewidth = 0.2
+
+        if element.hasAttribute("bordercolor"):
+            bordercolor = Color.from_hex(element.getAttribute("bordercolor"))
+        else:
+            bordercolor = Color.BLACK
+
+        if element.hasAttribute("fillcolor"):
+            fillcolor = Color.from_hex(element.getAttribute("fillcolor"))
+        else:
+            fillcolor = Color.WHITE
+
+        if element.hasAttribute("round"):
+            round = self.parse_number(element.getAttribute("round"), False)
+        else:
+            round = 0
+            
+        box = Box(size, linewidth, Shape.SOLID, bordercolor, fillcolor, round = round)
+
+        section.add_child(position, box)
 
     def _process_datasources(self, element):
         # Process children
@@ -233,18 +264,21 @@ class XMLParser(object):
         
         return x, y
 
-    def parse_number(self,value):
+    def parse_number(self, value, parse_unit = True):
         """
         Parses a string value in the form numberunit or number unit
         For example: 12cm or 12 cm
         @param value: The string to parse
+        @param parse_unit: If false, the number cannot contain an unit of measurement
         @returns: a numeric value in mm
         @raise: a ReportError on bad format
         """
         
         if value is None:
             return None
-        
+        if value == "all":
+            return None
+            
         n=""
         m=""
         nums="0123456789,.-"
@@ -263,12 +297,16 @@ class XMLParser(object):
         while i < len(value):
             m+=value[i]
             i+=1
+            
         try:
             n=float(n)
         except ValueError,e:
             raise ReportError(e)
             
         m=m.strip()
+        
+        if m and not parse_unit:
+            raise ReportError("Should be a pure number: %s"%value)
         
         if not m in units:
             raise ReportError("Invalid unit: %s"%m)

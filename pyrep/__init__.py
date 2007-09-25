@@ -12,3 +12,11 @@
 #                    datefmt='%a, %d %b %Y %H:%M:%S',
 #                    filename='pyrep.log',
 #                    filemode='w')
+
+# Import names for simplify user imports
+
+from base import *
+from report import Report
+from pdfrenderer import PDFRenderer
+import dataproviders
+from parser import XMLParser
