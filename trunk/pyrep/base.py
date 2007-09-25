@@ -6,14 +6,19 @@ Base classes.
 
 This module defines the classes to use to build a report.
 
-Millimeters is the default measurement.
+Millimeters is the default unit of measurement.
 """
 
 import copy
 import datetime
 import decimal
+import random
+import time
+import locale
 
 import dataproviders
+
+from fonts import Font
 
 def mm(*values):
     """
@@ -31,6 +36,9 @@ def cm(*values):
         return values[0] * 10
     return tuple([x * 10 for x in values])
 
+def quote(value):
+    return "\"\"\"%s\"\"\""%value
+    
 # Supported units
 units={
     'mm':mm,
@@ -43,12 +51,70 @@ class ReportError(StandardError):
     Exception
     """
 
+class Size(object):
+    """
+    Encapsulate a size as a width, height tuple.
+    """
+    
+    def __init__(self, *args):
+        
+        if len(args) == 1:
+            args = args[0]
+            
+        if len(args) != 2:
+            raise ReportError("Wrong size spec: %s"%args)
+
+        self.width, self.height = args
+        
+    def __len__(self):
+        return 2
+        
+    def __getitem__(self, item):
+        return (self.width, self.height)[item]
+    
+    def __setitem__(self, item, value):
+        if item == 0:
+            self.width = value
+        elif item == 1:
+            self.height = value
+        else:
+            raise IndexError("Index out of range: %s"%item)
+    
+    def __sub__(self, value):
+        try:
+            value + 0
+            0 - value
+            
+            w = self.width - value
+            h = self.height - value
+            
+            return self.__class__(w, h)
+        except StandardError, e:
+            try:
+                w = self.width - value[0]
+                h = self.height - value[1]
+                
+                return self.__class__(w, h)
+            except StandardError, e:
+                raise ValueError("Invalid value for sub: %s"%value)
+                
+    def __str__(self):
+        return "Size(%s, %s)"%(self.width, self.height)
+    
+    def __eq__(self, value):
+        if isinstance(value, Size):
+            return True
+        return (self.width == value[0]) and (self.height == value[1])
+            
 class Color(object):
     """
-    Object's color
+    Object's color in RGB form
+    @ivar red: Red component in decimal 0-255 range
+    @ivar green: Green component in decimal 0-255 range
+    @ivar blue: Red component in decimal 0-255 range
     """
 
-    class ColorMetaClass(type):
+    class _ColorMetaClass(type):
         """
         Used to add constants to the class
         """
@@ -58,7 +124,7 @@ class Color(object):
                   'WHITE': (255, 255, 255),
                   'RED': (255, 0, 0),
                   'GREEN': (0, 255, 0),
-                  'BLUE': (0, 0, 255)
+                  'BLUE': (0, 0, 255),
                   }
         
         def __new__(cls,classname,bases,classdict):
@@ -66,10 +132,10 @@ class Color(object):
             
             for k, v in cls.defaults.items():
                 setattr(c, k, c(*v))
-            
+
             return c
     
-    __metaclass__ = ColorMetaClass
+    __metaclass__ = _ColorMetaClass
     
     def __init__(self, red, green, blue):
         """
@@ -78,9 +144,10 @@ class Color(object):
         @param green: Green component in decimal 0-255 range
         @param blue: Blue component in decimal 0-255 range
         """
-        
+
         for x in ("red", "green", "blue"):
             v = locals()[x]
+
             if v<0 or v>255:
                 raise ReportError("Invalid value for %s component: %s (must be in range 0 - 255)"%(x,v))
         
@@ -92,16 +159,32 @@ class Color(object):
         """
         Converts the color values to hex (web) format
         """
-        return "#%X%X%X"%(self.red, self.green, self.blue)
+        
+        ret = ["#"]
+        
+        for x in (self.red, self.green, self.blue):
+            c = "%X"%x
+            if len(c) == 1: c = "0%s"%c
+            ret.append(c)
+            
+        return "".join(ret)
     
     @classmethod
     def from_hex(cls, hexvalue):
         """
         Create a color object from an hex-encoded string (eg. #AABBCC)
         """
-        #TODO: Implement
-        raise NotImplementedError()
+        if hexvalue[0] == "#":
+            hexvalue = hexvalue[1:]
 
+        rgb = hexvalue + ('0' * (6 - len(hexvalue)))
+        
+        r = int(rgb[0: 2], 16)
+        g = int(rgb[2: 4], 16)
+        b = int(rgb[4: 6], 16)
+        
+        return cls(r, g, b)
+        
     def __str__(self):
         """
         If this is a default colour, returns its name, else the tuple (red, green, blue)
@@ -114,51 +197,32 @@ class Color(object):
     
     def __eq__(self, color):
         return self.red == color.red and self.green == color.green and self.blue == color.blue
-    
-class Font(object):
-    """
-    Font object
-    @ivar id: Font's identificator (string)
-    @ivar face: Font face name. Valid faces are defined by the implementation.
-    @ivar size: Font size in points
-    @ivar style: A combination of styles flags (ITALIC,BOLD,UNDERLINED)
-    """
-    ITALIC = 1
-    BOLD = 2
-    UNDERLINED = 4
-    
-    fonts = dict()
-    font_faces = list()
-    
-    def __init__(self,id,face,size,style=[]):
+
+    def __len__(self):
         """
-        Constructor
-        @param id: Font's identificator (string)
-        @param face: Font face name. Valid faces are defined by implementation.
-        @param size: Font size in points
-        @param style: A combination of styles flags (ITALIC, BOLD, UNDERLINED)
+        The length of the colour when considered as a sequence is always 3: (r, g, b)!
         """
+        return 3
         
-        if id is None:
-            id = "font_%s"%len(self.__class__.fonts)
-            
-        self.id = id
-        
-        self.faces = face.split(",")
-        self.face = self.faces[0]
-                
-        self.size = size
-        
-        self.style = style
-        
-        self.__class__.fonts[id] = self
-        
-    def __str__(self):
-        return  "Font %s face: %s size %s style %s"%(self.id, self.face, self.size, self.style)
+    def __getitem__(self, item):
+        """
+        By defining this (and __len__) you can get the tuple of (r, g, b) in an easy way: just do tuple(color)!
+        """
+        return (self.red, self.green, self.blue)[item]
     
+    @classmethod
+    def random(cls):
+        """
+        Returns a random color
+        """
+        r, g, b = (random.randint(0, 255) for x in range(3))
+        return cls(r, g, b)
+        
 class DrawableObject(object):
     """
     Base class for drawable objects. A drawable object knows its size and how to draw itself.
+    @ivar color: Object's foreground color
+    @ivar backcolor: Object's background color
     """
     
     def __init__(self, size, **kwargs):
@@ -171,12 +235,12 @@ class DrawableObject(object):
         @param backcolor: Object's background color
         """
         
-        self._size = (0, 0)
+        self._size = Size(0, 0)
         self._position = (0, 0)
         
         self.parent = kwargs.get('parent', None)
 
-        self.size = size
+        self.size = Size(size)
         self.position = kwargs.get('position', (0, 0))
         
         self.color = kwargs.get('color', Color.BLACK)
@@ -208,7 +272,7 @@ class DrawableObject(object):
             if self.size[1] + self.y > self.parent.size[1]:
                 raise ReportError("Child %s exceed parent's height (parent: %s, child: %s + %s)!"%(self, self.parent.size[1], self.y, self.size[1]))
 
-        self._size = tuple(size)
+        self._size = Size(tuple(size))
         
     def get_size(self):
         """
@@ -218,9 +282,11 @@ class DrawableObject(object):
         
         size = list(self._size)
         for i in (0, 1):
-            if size[i] == -1 and self.parent is not None:
+            if size[i] is None and self.parent is not None:
                 size[i] = self.parent.size[i]
-        return tuple(size)
+            elif size[i] < 0 and self.parent is not None:
+                size[i] = self.parent.size[i] + size[i]
+        return Size(tuple(size))
     
     def set_position(self, position):
         """
@@ -246,10 +312,10 @@ class DrawableObject(object):
         self.position = (self.position[0], y)
 
     def set_width(self, w):
-        self.size = (w, self.height)
+        self.size = Size(w, self.height)
         
     def set_height(self, h):
-        self.size = (self.width, h)
+        self.size = Size(self.width, h)
     
     def __str__(self):
         return "<%s> size (%s, %s), pos (%s, %s)"%(self.__class__.__name__, self.width, self.height, self.x, self.y)
@@ -264,6 +330,9 @@ class DrawableObject(object):
 class Container(DrawableObject):
     """
     An object that contains one or more children
+    @ivar children: A list of the object's children 
+    @ivar default_font: The default font for this container (used if children don't have an explicit font)
+    @type default_font: Font object
     """
     
     def __init__(self, size, **kwargs):
@@ -301,14 +370,26 @@ class Container(DrawableObject):
         
         child.position = position
         self.children.append(child)
-            
+    
+    def get_font(self, name):
+        return self.parent.get_font(name)
+             
     def draw(self, renderer, environment = None):
+        """
+        Draws each child using the given renderer and environment
+        @param renderer: The renderer that will actually draw the children
+        @type renderer: A Renderer subclass
+        @param environment: The environment data to use
+        """
         for child in self.children:
             child.draw(renderer, environment)
             
 class Page(DrawableObject):
     """
     Page definition
+    @cvar standard_pages: A mapping of standard page sizes. The key is the standard name, the value is a tuple of (width, height)
+    @cvar user_defined_pages: A Mapping of user defined page sizes
+    @ivar margins: The non-drawable page margins
     """
     
     standard_pages={
@@ -372,6 +453,13 @@ class Picture(DrawableObject):
 class Text(DrawableObject):
     """
     A Text value, used to display any kind of textual value
+    @ivar font: The object's font
+    @type font: Font
+    @ivar value: The object's value. Could be any valid python expression that will be (safely, we hope) evaluated on runtime. You cannot use "dangerous" 
+                 functions as the value, unless you define your custom functions
+    @type value: string
+    @ivar alignment: Text alignment in the field
+    @type alignment: One of ALIGN_LEFT, ALIGN_RIGHT, ALIGN_CENTER
     """
     
     ALIGN_LEFT = 0
@@ -385,17 +473,26 @@ class Text(DrawableObject):
         @keyword font: Object's font
         @keyword value: Object's value (a valid python expression to be evaulated)
         @keyword alignment: one of ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT: Aligns the text in the field
+        @keyword color: Text color
+        @keyword stretch: TO DOCUMENT
         """
         
         super(Text,self).__init__(size, **kwargs)
         
         self.font = kwargs.get('font', None)
+        if isinstance(self.font, basestring):
+            self.font = self.parent.get_font(self.font)
         
         self.value = kwargs.get('value', "")
         
         self.alignment = kwargs.get('alignment', self.__class__.ALIGN_LEFT)
+        
+        self.color = kwargs.get('color', None)
     
     def draw(self, renderer, environment = None):
+        """
+        Draws the component using the given renderer
+        """
         if self.font is None:
             self.font = self.parent.default_font
             
@@ -405,27 +502,33 @@ class Text(DrawableObject):
         return "Text object: %s"%self.value
     
 class Shape(DrawableObject):
-    """ Base class for shapes. TO DOCUMENT """
+    """ 
+    Base class for shapes
+    @ivar linewidth: Line width in millimeters
+    @ivar linetype: The line' shape. By now you can only make solid lines    
+    """
     SOLID = 1
 
-    def __init__(self, size, linewidth = 0.5, linetype = SOLID):
+    def __init__(self, size, linewidth = 0.5, linetype = SOLID, linecolor = Color.BLACK):
         super(Shape, self).__init__(size)
         
         self.linewidth = linewidth
         self.linetype = linetype
         
+        self.color = linecolor
+        
 class HLine(Shape):
     """ Horizontal line """
 
-    def __init__(self, width = -1, linewidth = 0.2, linetype = Shape.SOLID):
+    def __init__(self, width = None, linewidth = 0.2, linetype = Shape.SOLID, linecolor = Color.BLACK):
         """
         Constructor
-        @param width: Line's width on the page, expressed in millimeters. If -1, the container's width will be used
+        @param width: Line's width on the page, expressed in millimeters. If None, the container's width will be used
         @param linewidth: The line's width (defaults to 0.2 millimeters)
         @param linetype: The line's type. By now, only solid lines are supported
         """
         
-        super(HLine, self).__init__( (width,linewidth), linewidth, linetype )
+        super(HLine, self).__init__( (width, 0), linewidth, linetype, linecolor)
 
     def draw(self, renderer, environment = None):
         renderer.draw_hline(self, environment)
@@ -433,20 +536,30 @@ class HLine(Shape):
 class VLine(Shape):
     """ Vertical line """
 
-    def __init__(self, height = -1, linewidth = 0.2, linetype = Shape.SOLID):
+    def __init__(self, height = None, linewidth = 0.2, linetype = Shape.SOLID, linecolor = Color.BLACK):
         """
         Constructor
-        @param height: Line's height on the page, expressed in millimeters. If -1, the container's height will be used
+        @param height: Line's height on the page, expressed in millimeters. If None, the container's height will be used
         @param linewidth: The line's width (defaults to 0.2 millimeters)
         @param linetype: The line's type. By now, only solid lines are supported
         """
-        super(VLine, self).__init__( (linewidth, height), linewidth, linetype )
+        super(VLine, self).__init__( (0, height), linewidth, linetype, linecolor)
 
     def draw(self, renderer, environment = None):
         renderer.draw_vline(self, environment)
     
-class Rect(Shape):
-    """ Rectangle """
+class Box(Shape):
+    """ A Box """
+
+    def __init__(self, size, linewidth = 0.2, linetype = Shape.SOLID, bordercolor = Color.BLACK, fillcolor = None, round = 0):
+        super(Box, self).__init__( size, linewidth, linetype, bordercolor)
+
+        self.backcolor = fillcolor
+        
+        self.round = round
+
+    def draw(self, renderer, environment = None):
+        renderer.draw_box(self, environment)
 
 class Section(Container):
     """ A Report's section """
@@ -454,7 +567,44 @@ class Section(Container):
     def __init__(self, parent, size, **kwargs):
         kwargs['parent'] = parent
         super(Section, self).__init__(size, **kwargs)
-
+    
+    def set_size(self, size):
+        """
+        We need to do additional tests on sections's size, e.g. if the total height 
+        of header+body+footer exceeds page's height. Leave that tests to the 
+        report itself
+        """
+        
+        # TODO: do we need to reduce coupling between section and report?
+        
+        self.parent.check_sections_height()
+        
+        super(Section, self).set_size(size)        
+    
+    def get_size(self):
+        """
+        Look at DrawableObject's get_size!
+        """
+        return super(Section, self).get_size()
+        
+    size = property(get_size, set_size, None, """ Section's size """)
+    
+    def __getattr__(self, attr):
+        """
+        We return section's name as the real name. This is a little bit tricky...
+        """
+        
+        if attr == 'name':
+            return {
+                self.parent.header : "Header",
+                self.parent.title : "Title",
+                self.parent.body : "Body",
+                self.parent.footer : "Footer",
+                self.parent.summary : "Summary",
+            }.get(self, "Section")
+        
+        return super(Section, self).__getattr__(attr)
+        
 class Group(object):
     """
     Data groups - NOT IMPLEMENTED
@@ -468,6 +618,9 @@ class Group(object):
         self.footer = Section(self, (0,0))
 
 class Data(object):
+    """
+    TODO: TO DOCUMENT
+    """
     class _Object(object):
         pass
     
@@ -479,6 +632,15 @@ class Data(object):
         Returns valid data
         """
         
+        def format_date(date, loc = None):
+            return date.strftime(locale.nl_langinfo(locale.D_FMT))
+        
+        def iif(cond, val1, val2):
+            if cond:
+                return val1
+            else:
+                return val2
+                
         import __builtin__
 
         # System variables
@@ -501,11 +663,17 @@ class Data(object):
         # Builds a "safe" functions dict
         valid_names = ('abs', 'bool', 'chr', 'cmp', 'divmod', 'float', 'hash', 
                        'hex', 'int', 'len', 'max', 'min', 'oct', 'ord', 'pow',
-                       'range', 'round', 'str', 'sum', 'unichr', 'unicode', 
+                       'range', 'round', 'str', 'sum', 'unichr', 'unicode',
                        )
+        
+        local_names = ('format_date', 'iif')
+        
         for name in valid_names:
             setattr(funcs, name, getattr(__builtin__, name))
-
+        
+        for name in local_names:
+            setattr(funcs, name, locals()[name])
+        
         # Current datasource row
         row = self.report.currentrow
                 
@@ -514,179 +682,19 @@ class Data(object):
             d[n] = locals()[n]
             
         return d
-        
-class Report(object):
-    """
-    The Report class
-    """
-    
-    def __init__(self, page = Page('A4')):
-        
-        self.page = page
-        
-        # Preferred renderer
-        self.preferred_renderer = None
-        
-        # Title band (printed only once per report)
-        self.title = Section(self, (-1,0))
-        
-        # Page header (printed once per page)
-        self.header = Section(self, (-1,0))
-        
-        # Report detail (body)
-        self.body = Section(self, (-1,0))
-        
-        # Page footer (once per page)
-        self.footer = Section(self, (-1,0))
-        
-        # Report summary (printed after report ending)
-        self.summary = Section(self, (-1,0))
-        
-        # Groups of data
-        self.groups = list()
-        
-        # Subreports
-        self.subreports = list()
-        
-        # Variables
-        self.variables = dict()
-        
-        # Parameters
-        self.parameters = dict()
-        
-        # Calculations
-        self.calculations = list()
-        
-        # Report-defined data sources
-        self.datasources = dict()
-        
-        # Fonts
-        self.fonts = dict()
-    
-    def add_variable(self, var):
-        self.variables[var.name] = var
-    
-    def add_parameter(self, par):
-        self.parameters[par.name] = par
-    
-    def add_calculation(self, calc):
-        calc.report = self
-        self.calculations.append(calc)
-    
-    def register_font(self, font):
-        self.fonts[font.id] = font
-        
-    def get_font(self, name):
-        try:
-            return self.fonts[name]
-        except KeyError:
-            raise ReportError("Unregistered font name: %s"%name)
-    
-    def get_size(self):
-        return self.page.size
-    
-    size = property(get_size, None, None, """ Report's size is page's size! """)
-        
-    def process(self, renderer):
-        self.pagenum = 0
-        newpage = True
-        reset_calcs = False
-        self.currentrow = None
-        footer_drawn = False
-        rec_count = 0
-        
-        environment = Data(self)
-        
-        y = self.title.y
-        
-        # Print this only once per page
-        self.title.draw(renderer, environment)
-        y += self.title.height
-        self.header.y = y
-        
-        # Cycle trough the datasource
-        datasource = renderer.maindatasource
-
-        for self.currentrow in datasource:
-            rec_count += 1
-
-            if newpage:
-                # For each page, print an header
-                renderer.start_page()
-                self.pagenum += 1
-
-                self.header.draw(renderer, environment)
-                y += self.header.height
-                self.body.y = y
-                newpage = False
-                
-            footer_drawn = False
-                
-            # If y position exceeds body's reserved space, draws the footer
-            # and starts a new page
-            if (y + self.body.height) > self.page.height - self.footer.height:
-                # Draws footer
-                newpage = True
-                self.footer.y = self.page.height - self.footer.height
-                
-                self.footer.draw(renderer, environment)
-                renderer.finalize_page()
-                footer_drawn = True
-                
-                y = 0
-                self.header.y = y
-                
-                # Draws page header
-                renderer.start_page()
-                self.pagenum += 1
-
-                self.header.draw(renderer, environment)
-                y += self.header.height
-                self.body.y = y
-                newpage = False
-                
-                reset_calcs = True
-                
-            # Draws body band
-            self.body.draw(renderer, environment)
-            y += self.body.height
-            self.body.y = y
-
-            if reset_calcs:
-                reset_calcs = False
-                # Reset page-resetted calcs
-                for calc in self.calculations:
-                    if calc.reset_at == "page":
-                        calc.reset()
-
-            # Execute report's calculations
-            for calc in self.calculations:
-                calc.execute(renderer, environment)
-        
-        if not rec_count:
-            raise ReportError("No data available!")
-        
-        if not footer_drawn:
-            self.footer.y = self.page.height - self.footer.height
-            self.footer.draw(renderer, environment)
-
-        # Draws summary band
-        if self.summary.height < self.page.height - self.footer.height - y:
-            self.summary.y = y
-            self.summary.draw(renderer, environment)
-            renderer.finalize_page()
-        else:
-            # New page
-            renderer.finalize_page()
-            renderer.start_page()
-            self.summary.draw(renderer, environment)
-            renderer.finalize_page()
-            
-            
+                    
 class Renderer(object):
     """
     Base renderer class
     """
+    
+    def __init__(self, report):
+        """
+        Constructor
+        @param report: The Report object to render
+        """
+        
+        self.report = report
 
     def render(self, *args, **kwargs):
 
@@ -725,10 +733,13 @@ class Renderer(object):
     def draw_text(self, text, environment = None):
         raise NotImplementedError("Please use a subclass!")
 
-    def draw_text(self, shape, environment = None):
+    def draw_vline(self, shape, environment = None):
         raise NotImplementedError("Please use a subclass!")
 
-    def draw_text(self, shape, environment = None):
+    def draw_hline(self, shape, environment = None):
+        raise NotImplementedError("Please use a subclass!")
+
+    def draw_box(self, shape, environment = None):
         raise NotImplementedError("Please use a subclass!")
     
     def safe_eval(self, expr, environment):
@@ -745,11 +756,17 @@ class Renderer(object):
             loc.update(environment.get_data())
         
         glo = dict()
-        builtins = dict()
+        # We need to have the "__import__" function, because is needed by a lot of things. 
+        # Let's try at least to don't allow the user to call it explicitly, probably this check 
+		# can be easily passed around...
+        builtins = dict(__import__ = __import__)
             
         glo['__builtins__'] = builtins
 
         try:
+            if "__import__" in expr:
+                raise ValueError("You cannot use __import__!")
+                
             val = eval(expr, glo, loc)
         except AttributeError, err:
             e = err.args[0]
@@ -757,9 +774,14 @@ class Renderer(object):
             i += len(" attribute ")
             msg = "Invalid variable/function name: %s"%e[i:]
             raise ReportError(msg)
-        
+        except StandardError, e:
+            raise ReportError(str(e))
+            
         return val
-
+    
+    def get_system_fonts(self):
+        pass
+        
 class Variable(object):
     """
     This is a report-defined variable.
@@ -803,7 +825,7 @@ class Calculation(object):
     """
     
     def __init__(self, type, variable, value, reset = "end", startvalue = None):
-        if not type in ("sum", "avg", "min", "max"):
+        if not type in ("sum", "avg", "min", "max", "assign"):
             raise ReportError("Invalid calculation type: %s"%type)
         
         if not reset in ("end", "page"):
@@ -857,5 +879,5 @@ class Calculation(object):
             if val > self.partial:
                 self.partial = val
             self.variable.value = self.partial
-            
-            
+        elif self.type == "assign":
+            self.variable.value = val

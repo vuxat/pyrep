@@ -4,14 +4,16 @@
 """
 Test runner
 """
+import os
+import sys
+sys.path.append("..")
 
 import unittest
 
-modules=[
-         'test_base', 'test_pdf', 'test_parser'
-]
+testmodules = [os.path.splitext(x)[0] for x in os.listdir(".") if x.startswith("test_") and x.endswith(".py")]
 
-modules=[__import__(mod,globals(),locals(),mod) for mod in modules if mod[0] != '_' ]
-suite=unittest.TestSuite([x.suite for x in modules])
+modules = [__import__(mod,globals(),locals(),mod) for mod in testmodules if mod[0] != '_' ]
+
+suite = unittest.TestSuite([x.suite for x in modules])
 
 unittest.TextTestRunner(verbosity=2).run(suite)

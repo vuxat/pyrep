@@ -159,7 +159,7 @@ class TestParser(unittest.TestCase):
         datasource = range(86)
 
         r = PDFRenderer(report)
-        r.render(datasources = [dataproviders.DataProvider(datasource)], outfile = "test3.pdf")
+        r.render(datasources = [dataproviders.DataProvider(datasource)], outfile = "out/%s.pdf"%self._testMethodName)
 
     def testFileParser(self):
         conn = sqlite3.connect(":memory:")
@@ -175,7 +175,7 @@ class TestParser(unittest.TestCase):
         report = p.parse()
 
         r = PDFRenderer(report)
-        r.render(module = sqlite3, conn = conn, outfile = "test4.pdf")
+        r.render(module = sqlite3, conn = conn, outfile = "out/%s.pdf"%self._testMethodName)
 
 suite = unittest.makeSuite(TestParser)
 
